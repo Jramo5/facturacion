@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Generador de Facturas Mobile v2.5.0</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- ZXing para lectura de códigos de barras -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.20.0/index.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="version-badge">v2.5.0 Mobile</div>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Procesando...</div>
+</div>
+
+<!-- ==================== MODAL DE CLIENTE ==================== -->
+<div class="modal-overlay" id="client-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>🛍️ Gestión de Cliente</h2>
+            <button class="modal-close" onclick="closeClientModal()">×</button>
+        </div>
+
+        <div class="modal-section">
+            <h3>Buscar Cliente</h3>
+            <div class="input-group">
+                <label>Buscar por nombre o teléfono</label>
+                <div class="autocomplete-container">
+                    <input type="text" id="client-search" placeholder="Escribe para buscar..." autocomplete="off">
+                    <div id="client-autocomplete-results" class="autocomplete-results"></div>
+                </div>
+                <p class="search-hint">💡 Escribe al menos 2 caracteres</p>
+            </div>
+
+            <div id="client-data-display" class="client-data-display" style="display:none">
+                <p><strong>Nombre:</strong> <span id="display-client-name">---</span></p>
+                <p><strong>Teléfono:</strong> <span id="display-client-phone">---</span></p>
+                <p><strong>Dirección:</strong> <span id="display-client-address">---</span></p>
+            </div>
+
+            <div class="action-buttons-modal">
+                <button class="btn btn-success btn-small" onclick="showNewClientForm()">➕ Crear Nuevo</button>
+                <button class="btn btn-warning btn-small" id="edit-client-btn" onclick="showEditClientForm()" style="display:none">✏️ Editar</button>
+                <button class="btn btn-info btn-small" onclick="showAllClientsTable()">👥 Ver Todos</button>
+            </div>
+        </div>
+
+        <div id="all-clients-table-section" class="form-section">
+            <h3>📋 Todos los Clientes</h3>
+            <div style="margin-bottom:12px;">
+                <input type="text" id="clients-table-search" placeholder="🔍 Buscar en tabla..."
+                    oninput="filterClientsTable(this.value)"
+                    style="width:100%;padding:10px;border:1px solid #ccc;border-radius:4px;">
+            </div>
+            <div id="clients-table-container" style="max-height:400px;overflow-y:auto;"></div>
+            <button class="btn btn-secondary btn-small" style="margin-top:10px" onclick="hideAllClientsTable()">Cerrar Tabla</button>
+        </div>
+
+        <div id="new-client-form" class="form-section">
+            <h3>Nuevo Cliente</h3>
+            <div class="controls-grid">
+                <div class="input-group"><label>Nombre del Cliente *</label><input id="new-client-name" placeholder="Nombre completo"></div>
+                <div class="input-group"><label>Teléfono *</label><input id="new-client-phone" placeholder="7890-1234"></div>
+                <div class="input-group"><label>Dirección</label><input id="new-client-address" placeholder="Col. Escalón"></div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary btn-small" onclick="hideNewClientForm()">Cancelar</button>
+                <button class="btn btn-success btn-small" onclick="saveNewClient()">💾 Guardar</button>
+            </div>
+        </div>
+
+        <div id="edit-client-form" class="form-section">
+            <h3>Editar Cliente</h3>
+            <div class="controls-grid">
+                <div class="input-group"><label>Nombre del Cliente *</label><input id="edit-client-name"></div>
+                <div class="input-group"><label>Teléfono *</label><input id="edit-client-phone"></div>
+                <div class="input-group"><label>Dirección</label><input id="edit-client-address"></div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-danger btn-small" onclick="deleteClient()">🗑️ Eliminar</button>
+                <button class="btn btn-secondary btn-small" onclick="hideEditClientForm()">Cancelar</button>
+                <button class="btn btn-success btn-small" onclick="updateClient()">💾 Actualizar</button>
+            </div>
+        </div>
+
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeClientModal()">Cerrar</button>
+            <button class="btn btn-primary" onclick="applyClientSelection()">✅ Aplicar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MODAL VENDEDOR/TIENDA ==================== -->
+<div class="modal-overlay" id="seller-store-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>👤 Vendedor y Tienda</h2>
+            <button class="modal-close" onclick="closeSellerStoreModal()">×</button>
+        </div>
+
+        <div class="modal-section">
+            <h3>Vendedor</h3>
+            <div class="input-group">
+                <label>Seleccionar Vendedor</label>
+                <select id="seller-select" onchange="loadSellerData()">
+                    <option value="">-- Seleccionar --</option>
+                </select>
+            </div>
+
+            <div id="seller-data-display" class="client-data-display" style="display:none">
+                <p><strong>Nombre:</strong> <span id="display-seller-name">---</span></p>
+                <p><strong>Teléfono:</strong> <span id="display-seller-phone">---</span></p>
+                <p><strong>Tienda:</strong> <span id="display-seller-store">---</span></p>
+            </div>
+
+            <div class="action-buttons-modal">
+                <button class="btn btn-success btn-small" onclick="showNewSellerForm()">➕ Crear</button>
+                <button class="btn btn-warning btn-small" id="edit-seller-btn" onclick="showEditSellerForm()" style="display:none">✏️ Editar</button>
+            </div>
+        </div>
+
+        <div id="new-seller-form" class="form-section">
+            <h3>Nuevo Vendedor</h3>
+            <div class="controls-grid">
+                <div class="input-group"><label>Nombre *</label><input id="new-seller-name" placeholder="Nombre del vendedor"></div>
+                <div class="input-group"><label>Teléfono *</label><input id="new-seller-phone" placeholder="7123-4567"></div>
+                <div class="input-group"><label>Tienda *</label><select id="new-seller-store"></select></div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary btn-small" onclick="hideNewSellerForm()">Cancelar</button>
+                <button class="btn btn-success btn-small" onclick="saveNewSeller()">💾 Guardar</button>
+            </div>
+        </div>
+
+        <div id="edit-seller-form" class="form-section">
+            <h3>Editar Vendedor</h3>
+            <div class="controls-grid">
+                <div class="input-group"><label>Nombre *</label><input id="edit-seller-name"></div>
+                <div class="input-group"><label>Teléfono *</label><input id="edit-seller-phone"></div>
+                <div class="input-group"><label>Tienda *</label><select id="edit-seller-store"></select></div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-danger btn-small" onclick="deleteSeller()">🗑️ Eliminar</button>
+                <button class="btn btn-secondary btn-small" onclick="hideEditSellerForm()">Cancelar</button>
+                <button class="btn btn-success btn-small" onclick="updateSeller()">💾 Actualizar</button>
+            </div>
+        </div>
+
+        <hr>
+
+        <div class="modal-section">
+            <h3>Tienda</h3>
+            <div id="store-data-display" class="client-data-display" style="display:none">
+                <p><strong>Nombre:</strong> <span id="display-store-name">---</span></p>
+                <p><strong>Teléfono:</strong> <span id="display-store-phone">---</span></p>
+                <p><strong>Dirección:</strong> <span id="display-store-address">---</span></p>
+                <p><strong>Email:</strong> <span id="display-store-email">---</span></p>
+            </div>
+
+            <div class="action-buttons-modal">
+                <button class="btn btn-success btn-small" onclick="showNewStoreForm()">➕ Crear</button>
+                <button class="btn btn-warning btn-small" id="edit-store-btn" onclick="showEditStoreForm()" style="display:none">✏️ Editar</button>
+            </div>
+        </div>
+
+        <div id="new-store-form" class="form-section">
+            <h3>Nueva Tienda</h3>
+            <div class="controls-grid">
+                <div class="input-group"><label>Nombre *</label><input id="new-store-name"></div>
+                <div class="input-group"><label>Teléfono *</label><input id="new-store-phone"></div>
+                <div class="input-group"><label>Dirección *</label><input id="new-store-address"></div>
+                <div class="input-group"><label>Email</label><input id="new-store-email" type="email"></div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary btn-small" onclick="hideNewStoreForm()">Cancelar</button>
+                <button class="btn btn-success btn-small" onclick="saveNewStore()">💾 Guardar</button>
+            </div>
+        </div>
+
+        <div id="edit-store-form" class="form-section">
+            <h3>Editar Tienda</h3>
+            <div class="controls-grid">
+                <div class="input-group"><label>Nombre *</label><input id="edit-store-name"></div>
+                <div class="input-group"><label>Teléfono *</label><input id="edit-store-phone"></div>
+                <div class="input-group"><label>Dirección *</label><input id="edit-store-address"></div>
+                <div class="input-group"><label>Email</label><input id="edit-store-email" type="email"></div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-danger btn-small" onclick="deleteStore()">🗑️ Eliminar</button>
+                <button class="btn btn-secondary btn-small" onclick="hideEditStoreForm()">Cancelar</button>
+                <button class="btn btn-success btn-small" onclick="updateStore()">💾 Actualizar</button>
+            </div>
+        </div>
+
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeSellerStoreModal()">Cerrar</button>
+            <button class="btn btn-primary" onclick="applySellerStoreSelection()">✅ Aplicar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MODAL HISTORIAL ==================== -->
+<div class="modal-overlay" id="history-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>📜 Historial de Facturas</h2>
+            <button class="modal-close" onclick="closeHistoryModal()">×</button>
+        </div>
+
+        <div class="history-filters">
+            <div class="filter-group">
+                <label>📅 Filtrar por fecha:</label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <input type="date" id="filter-date-from" placeholder="Desde">
+                    <input type="date" id="filter-date-to" placeholder="Hasta">
+                </div>
+            </div>
+            <div class="filter-group">
+                <label>🏷️ Filtrar por estado:</label>
+                <select id="filter-status">
+                    <option value="all">Todos los estados</option>
+                    <option value="pending">⏳ Pendientes</option>
+                    <option value="paid">✅ Pagadas</option>
+                    <option value="credit">💳 Crédito</option>
+                </select>
+            </div>
+            <div class="filter-actions">
+                <button class="btn btn-primary btn-small" onclick="applyHistoryFilters()">Aplicar Filtros</button>
+                <button class="btn btn-secondary btn-small" onclick="clearHistoryFilters()">Limpiar</button>
+            </div>
+        </div>
+
+        <hr style="margin:15px 0;border:none;border-top:1px solid #ddd;">
+
+        <div style="margin-bottom:12px;">
+            <div style="position:relative;">
+                <input type="text" id="history-search"
+                    placeholder="🔍 Buscar por cliente o # factura..."
+                    autocomplete="off"
+                    style="width:100%; padding:12px 40px 12px 12px; font-size:1em; border:1px solid #ccc; border-radius:6px;"
+                    oninput="filterHistory(this.value)">
+                <button id="history-search-clear" onclick="clearHistorySearch()"
+                    style="display:none; position:absolute; right:10px; top:50%; transform:translateY(-50%);
+                           background:none; border:none; font-size:1.2em; cursor:pointer; color:#999; padding:0;">×</button>
+            </div>
+            <div id="history-result-count" style="font-size:0.82em; color:#666; margin-top:5px; font-style:italic;"></div>
+        </div>
+
+        <div class="multi-select-controls">
+            <div class="selection-info">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="select-all-invoices" onchange="toggleSelectAll(this.checked)">
+                    <span>Seleccionar todas</span>
+                </label>
+                <span id="selected-count" class="selected-count">0 seleccionadas</span>
+            </div>
+            <div class="multi-actions" id="multi-actions" style="display:none;">
+                <button class="btn btn-danger btn-small" onclick="downloadMultiplePDF()">📄 PDF Múltiple</button>
+                <button class="btn btn-success btn-small" onclick="downloadMultipleImages()">🖼️ Imágenes ZIP</button>
+            </div>
+        </div>
+
+        <div id="invoice-history-list"></div>
+
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeHistoryModal()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MODAL ESTADO ==================== -->
+<div class="modal-overlay" id="status-modal">
+    <div class="modal-content compact">
+        <div class="modal-header">
+            <h2>🏷️ Estado de Factura</h2>
+            <button class="modal-close" onclick="closeStatusModal()">×</button>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+            <div class="status-option pending" id="status-pending" onclick="selectStatus('pending')">
+                <div class="status-icon">⏳</div>
+                <div class="status-info">
+                    <div class="status-title">PENDIENTE</div>
+                    <div class="status-description">Pago pendiente de recibir</div>
+                </div>
+            </div>
+            <div class="status-option paid" id="status-paid" onclick="selectStatus('paid')">
+                <div class="status-icon">✅</div>
+                <div class="status-info">
+                    <div class="status-title">PAGADO</div>
+                    <div class="status-description">Pago completado</div>
+                </div>
+            </div>
+            <div class="status-option credit" id="status-credit" onclick="selectStatus('credit')">
+                <div class="status-icon">💳</div>
+                <div class="status-info">
+                    <div class="status-title">CRÉDITO</div>
+                    <div class="status-description">Venta a crédito</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="payment-date-container" style="display:none; margin-top:15px; padding:12px; background:#e7f3ff; border-radius:6px;">
+            <label style="display:block; margin-bottom:8px; font-weight:600;">📅 Fecha de Pago:</label>
+            <input type="date" id="payment-date-input" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:4px;">
+            <p style="font-size:0.85em; color:#666; margin-top:5px;">Esta fecha aparecerá en la factura</p>
+        </div>
+
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeStatusModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="applyStatusChange()">✅ Aplicar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MODAL COMPARTIR ==================== -->
+<div class="modal-overlay" id="share-modal">
+    <div class="modal-content compact">
+        <div class="modal-header">
+            <h2>📤 Compartir Factura</h2>
+            <button class="modal-close" onclick="closeShareModal()">×</button>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+            <div class="share-option" onclick="shareAsPDF()">
+                <div class="share-icon">📄</div>
+                <div class="share-title">PDF</div>
+                <div class="share-description">Formato profesional multipágina<br>Ideal para imprimir o email</div>
+            </div>
+            <div class="share-option" onclick="shareAsImage()">
+                <div class="share-icon">🖼️</div>
+                <div class="share-title">Imagen PNG</div>
+                <div class="share-description">Optimizado para WhatsApp<br>Rápido y ligero</div>
+            </div>
+        </div>
+
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeShareModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MODAL DATOS ==================== -->
+<div class="modal-overlay" id="data-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>🗄️ Gestión de Datos</h2>
+            <button class="modal-close" onclick="closeDataModal()">×</button>
+        </div>
+
+        <div class="modal-section purple">
+            <h3>📦 Catálogo de Productos</h3>
+
+            <div id="products-status-info" class="file-info-box">
+                <p><strong>Estado:</strong> <span id="products-source-label">Predeterminado</span></p>
+                <p><strong>Productos cargados:</strong> <span id="products-count-label">0</span></p>
+            </div>
+
+            <div class="action-buttons-modal">
+                <button class="btn btn-purple btn-small" onclick="triggerLoadProducts()">📂 Cargar JSON</button>
+                <button class="btn btn-info btn-small" onclick="downloadProductsJSON()">⬇️ Descargar JSON</button>
+                <button class="btn btn-success btn-small" onclick="showAddProductForm()">➕ Añadir</button>
+            </div>
+            <input type="file" id="load-products-file" accept=".json" style="display:none" onchange="loadProductsFromFile(event)">
+
+            <!-- NUEVO v2.5.0: Formulario añadir producto con escaneo de código de barras -->
+            <div id="add-product-form" class="product-edit-form" style="margin-top:12px">
+                <h4 style="margin:0 0 10px;color:#5a189a;">Nuevo Producto</h4>
+
+                <!-- Campo código de barras con botón escanear -->
+                <div class="input-group" style="margin-bottom:10px;">
+                    <label>Código de Barras</label>
+                    <div class="barcode-input-group">
+                        <input type="text" id="new-prod-code" placeholder="Escanea o escribe el código">
+                        <button class="btn btn-scan btn-small" onclick="openBarcodeScanner('new-prod-code', null)" title="Escanear código">
+                            📷 <span class="scan-label-text">Escanear</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="controls-grid">
+                    <div class="input-group">
+                        <label>Nombre del Producto *</label>
+                        <input id="new-prod-name" placeholder="Camisa Manga Larga">
+                    </div>
+                    <div class="input-group">
+                        <label>Precio Unitario *</label>
+                        <input type="number" id="new-prod-price" step="0.01" placeholder="25.00">
+                    </div>
+                    <div class="input-group">
+                        <label>Precio Mayoreo</label>
+                        <input type="number" id="new-prod-wholesale" step="0.01" placeholder="20.00">
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+                    <button class="btn btn-secondary btn-small" style="flex:1" onclick="hideAddProductForm()">Cancelar</button>
+                    <button class="btn btn-success btn-small" style="flex:1" onclick="saveNewProduct()">💾 Guardar</button>
+                </div>
+            </div>
+
+            <div class="product-search-box" style="margin-top:12px;">
+                <input type="text" id="product-search-input" placeholder="🔍 Buscar producto..." oninput="filterProductsList(this.value)">
+                <span class="search-icon">🔍</span>
+                <button class="clear-search" id="clear-product-search" onclick="clearProductSearch()">×</button>
+            </div>
+            <div id="product-search-results-info" class="search-results-info"></div>
+
+            <div id="products-list-container" style="margin-top:12px; max-height:300px; overflow-y:auto;"></div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="modal-section green">
+            <h3>👥 Base de Datos (Clientes, Tiendas, Vendedores)</h3>
+
+            <div id="database-status-info" class="file-info-box">
+                <p><strong>Clientes:</strong> <span id="db-clients-count">0</span></p>
+                <p><strong>Vendedores:</strong> <span id="db-sellers-count">0</span></p>
+                <p><strong>Tiendas:</strong> <span id="db-stores-count">0</span></p>
+            </div>
+
+            <div class="action-buttons-modal">
+                <button class="btn btn-success btn-small" onclick="triggerLoadDatabase()">📂 Cargar JSON</button>
+                <button class="btn btn-info btn-small" onclick="downloadDatabaseJSON()">⬇️ Descargar JSON</button>
+            </div>
+            <input type="file" id="load-database-file" accept=".json" style="display:none" onchange="loadDatabaseFromFile(event)">
+
+            <p class="info-text" style="margin-top:8px">
+                ℹ️ Al cargar, los registros existentes se actualizan por ID. Los nuevos se añaden.
+            </p>
+        </div>
+
+        <hr class="divider">
+
+        <div class="modal-section orange">
+            <h3>📜 Historial de Facturas</h3>
+
+            <div id="history-status-info" class="file-info-box">
+                <p><strong>Facturas guardadas:</strong> <span id="history-count-label">0</span></p>
+                <p><strong>Total acumulado:</strong> $<span id="history-total-label">0.00</span></p>
+            </div>
+
+            <div class="action-buttons-modal">
+                <button class="btn btn-warning btn-small" onclick="triggerLoadHistory()">📂 Cargar Historial</button>
+                <button class="btn btn-info btn-small" onclick="downloadHistoryJSON()">⬇️ Descargar Historial</button>
+                <button class="btn btn-danger btn-small" onclick="clearAllHistory()">🗑️ Borrar Todo</button>
+            </div>
+            <input type="file" id="load-history-file" accept=".json" style="display:none" onchange="loadHistoryFromFile(event)">
+
+            <p class="info-text" style="margin-top:8px">
+                ⚠️ Al cargar un historial, se fusionará con el existente. Las facturas duplicadas se omiten.
+            </p>
+        </div>
+
+        <hr class="divider">
+
+        <!-- NUEVA SECCIÓN v2.6.0: Configuración de Tienda -->
+        <div class="modal-section" style="border-left-color:#e83e8c;">
+            <h3 style="color:#e83e8c;">🏪 Configuración de Tienda (local)</h3>
+            <p class="info-text" style="margin-bottom:12px;">
+                ℹ️ Estos datos se guardan solo en este dispositivo y no se incluyen en el código fuente.
+            </p>
+
+            <div id="store-config-display" class="file-info-box" style="margin-bottom:10px;"></div>
+
+            <div id="store-config-form" style="display:none;">
+                <div class="controls-grid" style="gap:10px; margin-bottom:12px;">
+                    <div class="input-group">
+                        <label>Nombre de la Tienda *</label>
+                        <input id="cfg-store-name" placeholder="Ej: Mi Tienda">
+                    </div>
+                    <div class="input-group">
+                        <label>Teléfono *</label>
+                        <input id="cfg-store-phone" placeholder="Ej: 7000-0000">
+                    </div>
+                    <div class="input-group">
+                        <label>Dirección *</label>
+                        <input id="cfg-store-address" placeholder="Ej: Col. Centro, San Salvador">
+                    </div>
+                    <div class="input-group">
+                        <label>Email</label>
+                        <input id="cfg-store-email" type="email" placeholder="correo@ejemplo.com">
+                    </div>
+                    <div class="input-group">
+                        <label>URL del Logo (imagen)</label>
+                        <input id="cfg-store-logo" type="url" placeholder="https://...imagen.png">
+                        <p class="info-text" style="margin-top:4px;">Usa una URL pública (GitHub raw, imgbb, etc.)</p>
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="btn btn-secondary btn-small" style="flex:1" onclick="hideStoreConfigForm()">Cancelar</button>
+                    <button class="btn btn-success btn-small" style="flex:1" onclick="saveStoreConfig()">💾 Guardar</button>
+                </div>
+            </div>
+
+            <div class="action-buttons-modal" id="store-config-actions">
+                <button class="btn btn-primary btn-small" onclick="showStoreConfigForm()">⚙️ Configurar</button>
+                <button class="btn btn-danger btn-small" onclick="clearStoreConfig()">🗑️ Borrar Config</button>
+            </div>
+        </div>
+
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeDataModal()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MODAL ESCANER CODIGO DE BARRAS ==================== -->
+<div class="modal-overlay" id="barcode-scanner-modal">
+    <div class="modal-content compact">
+        <div class="modal-header">
+            <h2>📷 Escanear Código de Barras</h2>
+            <button class="modal-close" onclick="closeBarcodeScanner()">×</button>
+        </div>
+
+        <div class="barcode-scanner-container">
+            <div class="scanner-status" id="scanner-status">
+                <div class="scanner-status-icon">📷</div>
+                <p id="scanner-status-text">Iniciando cámara...</p>
+            </div>
+            <video id="barcode-video" playsinline autoplay style="display:none;"></video>
+            <canvas id="barcode-canvas" style="display:none;"></canvas>
+            <div class="scanner-overlay" id="scanner-overlay" style="display:none;">
+                <div class="scanner-frame">
+                    <div class="scanner-line"></div>
+                </div>
+                <p class="scanner-hint">Apunta al código de barras</p>
+            </div>
+            <div id="scanner-result" class="scanner-result" style="display:none;">
+                <p>✅ Código detectado:</p>
+                <strong id="scanner-result-code"></strong>
+            </div>
+        </div>
+
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeBarcodeScanner()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== NUEVO v2.5.0: MODAL AGREGAR PRODUCTOS A FACTURA ==================== -->
+<div class="modal-overlay" id="add-items-modal">
+    <div class="modal-content modal-content-tall">
+        <div class="modal-header">
+            <h2>➕ Agregar Productos</h2>
+            <button class="modal-close" onclick="closeAddItemsModal()">×</button>
+        </div>
+
+        <!-- Tabs de modo: Manual vs Código de barras -->
+        <div class="add-items-tabs">
+            <button class="add-tab active" id="tab-manual" onclick="switchAddTab('manual')">
+                🔍 Buscar Producto
+            </button>
+            <button class="add-tab" id="tab-barcode" onclick="switchAddTab('barcode')">
+                📷 Escanear Código
+            </button>
+        </div>
+
+        <!-- Panel: Búsqueda Manual -->
+        <div id="add-panel-manual" class="add-panel active">
+            <div class="controls-grid" style="gap:10px;">
+                <div class="input-group">
+                    <label>Producto</label>
+                    <div class="product-scan-row">
+                        <input id="modal-p-desc" list="modal-product-list" placeholder="Buscar producto..." autocomplete="off" oninput="onModalProductInput()">
+                        <datalist id="modal-product-list"></datalist>
+                        <button class="btn-barcode-inline" onclick="switchAddTab('barcode')" title="Buscar por código de barras">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                                <path d="M2 4h2v16H2V4zm3 0h1v16H5V4zm2 0h2v16H7V4zm3 0h1v16h-1V4zm2 0h3v16h-3V4zm4 0h1v16h-1V4zm2 0h2v16h-2V4z"/>
+                            </svg>
+                            <span class="btn-barcode-label">Código</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Precio</label>
+                    <input type="number" id="modal-p-price" step="0.01" placeholder="0.00">
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel: Escaneo de Código de Barras -->
+        <div id="add-panel-barcode" class="add-panel">
+            <div class="barcode-scan-area">
+                <div class="scan-status" id="modal-scan-status">
+                    <div class="scanner-status-icon">📷</div>
+                    <p>Presiona "Escanear" para activar la cámara</p>
+                </div>
+                <video id="modal-barcode-video" playsinline autoplay style="display:none; width:100%; border-radius:8px; max-height:220px; object-fit:cover;"></video>
+                <canvas id="modal-barcode-canvas" style="display:none;"></canvas>
+                <div class="scanner-overlay-inline" id="modal-scanner-overlay" style="display:none;">
+                    <div class="scanner-frame-sm">
+                        <div class="scanner-line"></div>
+                    </div>
+                </div>
+                <div id="modal-scan-result" class="modal-scan-result" style="display:none;">
+                    <p>✅ Código: <strong id="modal-scan-code"></strong></p>
+                    <p id="modal-scan-product-found" style="color:#28a745; font-weight:600;"></p>
+                    <p id="modal-scan-product-notfound" style="color:#dc3545; font-size:0.9em; display:none;"></p>
+                </div>
+            </div>
+            <div style="text-align:center; margin-top:10px;">
+                <button class="btn btn-scan" id="modal-scan-btn" onclick="startModalBarcodeScanner()">📷 Iniciar Cámara</button>
+                <button class="btn btn-secondary btn-small" id="modal-scan-stop-btn" onclick="stopModalBarcodeScanner()" style="display:none;">⏹ Detener</button>
+            </div>
+            <!-- Campos auto-completados -->
+            <div id="modal-barcode-fields" style="display:none; margin-top:12px;">
+                <div class="controls-grid" style="gap:10px;">
+                    <div class="input-group">
+                        <label>Producto (detectado)</label>
+                        <input id="modal-bc-desc" placeholder="Nombre del producto" readonly style="background:#f0f8e8;">
+                    </div>
+                    <div class="input-group">
+                        <label>Precio</label>
+                        <input type="number" id="modal-bc-price" step="0.01" placeholder="0.00">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controles comunes: Cantidad, IVA, Mayoreo -->
+        <div class="add-items-common">
+            <div class="controls-grid" style="gap:10px; grid-template-columns:1fr 1fr;">
+                <div class="input-group">
+                    <label>Cantidad</label>
+                    <input type="number" id="modal-p-qty" value="1" min="1">
+                </div>
+                <div class="checkbox-group" style="padding-top:20px;">
+                    <label><input type="checkbox" id="modal-p-iva"> IVA 13%</label>
+                    <label><input type="checkbox" id="modal-p-mayoreo" onchange="onModalMayoreoChange()"> Mayoreo</label>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" style="margin-top:12px;" onclick="addProductFromModal()">
+                ➕ Añadir a Factura
+            </button>
+        </div>
+
+        <!-- Lista de productos añadidos en esta sesión -->
+        <div class="added-items-preview">
+            <h4>📋 Productos añadidos en esta sesión <span id="modal-items-count" class="items-count-badge">0</span></h4>
+            <div id="modal-added-items-list" class="modal-added-items-list">
+                <p class="empty-msg">Aún no has añadido productos</p>
+            </div>
+        </div>
+
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeAddItemsModal()">✅ Listo</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== CONTROLES PRINCIPALES ==================== -->
+<div class="controls">
+    <h2>Facturas Mobile <span class="new-badge">v2.5.0</span></h2>
+
+    <div class="controls-grid">
+        <button class="btn btn-info" onclick="openClientModal()">🛍️ Cliente</button>
+        <button class="btn btn-info" onclick="openSellerStoreModal()">👤 Vendedor/Tienda</button>
+        <button class="btn btn-purple" onclick="openDataModal()">🗄️ Datos <span id="products-badge" class="product-count-badge">0</span></button>
+    </div>
+
+    <div class="current-selection" id="current-selection" style="display:none">
+        <p><strong>Selección actual:</strong></p>
+        <p id="selection-info">No hay selección</p>
+    </div>
+
+    <hr>
+
+    <!-- NUEVO v2.5.0: Botón principal para abrir modal de agregar productos -->
+    <div style="text-align:center; padding: 5px 0;">
+        <button class="btn btn-primary btn-add-products" onclick="openAddItemsModal()">
+            ➕ Agregar Productos a la Factura
+        </button>
+    </div>
+</div>
+
+<div class="action-buttons">
+    <button class="btn btn-share" onclick="openShareModal()">📤 Compartir</button>
+    <button class="btn btn-info" onclick="openHistoryModal()">📜 Historial</button>
+    <button class="btn btn-warning" onclick="openStatusModal()">🏷️ Estado</button>
+    <button class="btn btn-secondary" id="new-invoice-btn">🆕 Nueva</button>
+</div>
+
+<!-- ==================== FACTURA ==================== -->
+<div id="invoice">
+    <div class="invoice-content">
+        <div class="invoice-header">
+            <div class="company-info">
+                <div class="company-logo">
+<!-- svg -->
+                </div>
+                <div class="company-text">
+                    <h2 id="store-name-display">Mi Tienda</h2>
+                    <p id="store-address-display">Dirección no configurada</p>
+                    <p>Tel: <span id="store-phone-display">---</span></p>
+                    <p id="store-email-display" style="display:none;"></p>
+                </div>
+            </div>
+
+            <div class="invoice-info-box">
+                <div class="invoice-title">FACTURA Nº</div>
+                <div class="invoice-number" id="invoice-number">CODE</div>
+
+                <div class="invoice-meta-row">
+                    <span class="meta-label">Emisión:</span>
+                    <span class="meta-value" id="invoice-issue-date">DD/MM/YY</span>
+                </div>
+
+                <div class="invoice-meta-row" id="payment-date-row" style="display:none;">
+                    <span class="meta-label">Pagado:</span>
+                    <span class="meta-value" id="invoice-payment-date">DD/MM/YY</span>
+                </div>
+
+                <div class="invoice-status pending" id="invoice-status-text"
+                     onclick="openStatusModal()" title="Click para cambiar estado">PENDIENTE</div>
+            </div>
+        </div>
+
+        <div class="client-info">
+            <p><strong>Vendedor:</strong> <span id="seller-name-display">---</span></p>
+            <p><strong>Cliente:</strong> <span id="client-name-display">---</span></p>
+            <p><strong>Tel:</strong> <span id="client-phone-display">---</span></p>
+        </div>
+
+        <div class="table-watermark-container">
+            <div class="table-watermark pending" id="table-watermark">PENDIENTE</div>
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th>Cant</th>
+                        <th>Descripción</th>
+                        <th>Precio</th>
+                        <th>IVA</th>
+                        <th>Total</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="invoice-items-body"></tbody>
+            </table>
+        </div>
+
+        <div class="invoice-totals">
+            <table class="totals-table">
+                <tr>
+                    <td class="label">Subtotal</td>
+                    <td class="value" id="total-subtotal">$0.00</td>
+                </tr>
+                <tr>
+                    <td class="label">IVA</td>
+                    <td class="value" id="total-iva">$0.00</td>
+                </tr>
+                <tr class="grand-total">
+                    <td class="label">TOTAL</td>
+                    <td class="value" id="total-grand">$0.00</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="clear-float"></div>
+    </div>
+    <div class="invoice-disclaimer">
+        Documento sin validez fiscal. Comprobante comercial interno.
+    </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
