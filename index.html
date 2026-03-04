@@ -772,6 +772,26 @@
         </div>
 
         <div class="clear-float"></div>
+
+        <!-- COMENTARIOS / NOTAS DEL CLIENTE -->
+        <div class="invoice-comments" id="invoice-comments-section">
+            <div class="comments-header">
+                <span class="comments-label">📝 Notas / Instrucciones del pedido</span>
+                <button class="btn-edit-comment" id="btn-edit-comment" onclick="toggleCommentEdit()" title="Editar nota">✏️</button>
+            </div>
+            <div id="comment-display" class="comment-display">
+                <span id="comment-text-display" class="comment-placeholder">Sin notas. Toca ✏️ para agregar.</span>
+            </div>
+            <div id="comment-edit-area" class="comment-edit-area" style="display:none;">
+                <textarea id="invoice-comment-input" placeholder="Ej: Envolver para regalo 🎁, entrega en dirección X, incluir factura impresa, color preferido..." maxlength="400" rows="3"></textarea>
+                <div class="comment-edit-actions">
+                    <span id="comment-char-count" class="comment-char-count">0/400</span>
+                    <button class="btn-comment-cancel" onclick="cancelCommentEdit()">Cancelar</button>
+                    <button class="btn-comment-save" onclick="saveComment()">✅ Guardar</button>
+                </div>
+            </div>
+        </div>
+
     </div>
     <div class="invoice-disclaimer">
         Documento sin validez fiscal. Comprobante comercial interno.
