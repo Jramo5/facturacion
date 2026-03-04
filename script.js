@@ -1,8 +1,4 @@
 // ==========================================
-// JAVASCRIPT CORREGIDO v2.4.1
-// ==========================================
-
-// ==========================================
 // BASES DE DATOS PREDEFINIDAS
 // ==========================================
 const DEFAULT_DATABASE = {
@@ -27,6 +23,7 @@ let tempSelectedClientId = null;
 let editingProductIndex = null;
 let currentPaymentDate = null; // v2.4.0
 let selectedInvoices = new Set(); // v2.4.1
+let invoiceComment = ''; // Nota/comentario del pedido
 
 // ==========================================
 // v2.6.0: CONFIGURACIÓN LOCAL DE TIENDA
@@ -1644,6 +1641,7 @@ function getInvoiceData() {
         invoiceDate:  document.getElementById('invoice-issue-date').textContent,
         status: currentPaymentStatus,
         paymentDate: currentPaymentDate,
+        comment: invoiceComment,
         rows,
         subtotal: parseFloat(document.getElementById('total-subtotal').textContent.replace('$','')),
         iva:      parseFloat(document.getElementById('total-iva').textContent.replace('$','')),
@@ -1920,6 +1918,51 @@ async function drawInvoiceOnCanvas(canvas, inv, scale) {
     y += px(4);
     drawTotalRow('TOTAL',    '$' + inv.total.toFixed(2),    true);
 
+    // Comentario / Nota del pedido
+    if (inv.comment && inv.comment.trim()) {
+        y += px(14);
+        const commentBoxX = PAD;
+        const commentBoxW = RIGHT - PAD;
+
+        ctx.font         = `bold ${px(9)}px Arial, sans-serif`;
+        ctx.fillStyle    = '#005a9c';
+        ctx.textAlign    = 'left';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText('NOTAS / INSTRUCCIONES DEL PEDIDO', commentBoxX, y);
+        y += px(10);
+
+        // Línea de separación
+        ctx.strokeStyle = '#b0c4de';
+        ctx.lineWidth   = px(1);
+        ctx.setLineDash([px(4), px(3)]);
+        ctx.beginPath(); ctx.moveTo(commentBoxX, y); ctx.lineTo(RIGHT, y); ctx.stroke();
+        ctx.setLineDash([]);
+        y += px(8);
+
+        // Texto del comentario (con salto de línea automático)
+        ctx.font      = `${px(11)}px Arial, sans-serif`;
+        ctx.fillStyle = '#333333';
+        ctx.textAlign = 'left';
+
+        const maxW    = commentBoxW - px(4);
+        const words   = inv.comment.split(' ');
+        let line      = '';
+        const lineH   = px(16);
+
+        words.forEach(word => {
+            const test = line ? line + ' ' + word : word;
+            if (ctx.measureText(test).width > maxW && line) {
+                ctx.fillText(line, commentBoxX, y);
+                y += lineH;
+                line = word;
+            } else {
+                line = test;
+            }
+        });
+        if (line) { ctx.fillText(line, commentBoxX, y); y += lineH; }
+        y += px(6);
+    }
+
     // Marca de agua
     ctx.save();
     ctx.globalAlpha  = 0.055;
@@ -2111,6 +2154,7 @@ function saveCurrentInvoiceToHistory() {
         storeId:   currentSelection.storeId,
         paymentStatus: currentPaymentStatus,
         paymentDate: currentPaymentDate,
+        comment: invoiceComment,
         items,
         totals: {
             subtotal: parseFloat(document.getElementById('total-subtotal').textContent.replace('$','')),
@@ -2134,6 +2178,8 @@ function loadInvoice(jsonData) {
         setPaymentStatus(jsonData.paymentStatus || "pending");
         currentPaymentDate = jsonData.paymentDate || null;
         updatePaymentDateDisplay();
+        invoiceComment = jsonData.comment || '';
+        renderCommentDisplay();
         jsonData.items.forEach(item => {
             const tr = document.getElementById('invoice-items-body').insertRow();
             tr.dataset.subtotal = item.subtotal;
@@ -2162,7 +2208,61 @@ function newInvoice() {
     setPaymentStatus("pending");
     currentPaymentDate = null;
     updatePaymentDateDisplay();
+    invoiceComment = '';
+    renderCommentDisplay();
     updateTotals();
+}
+
+// ==========================================
+// COMENTARIOS / NOTAS DEL PEDIDO
+// ==========================================
+
+function toggleCommentEdit() {
+    const editArea   = document.getElementById('comment-edit-area');
+    const isVisible  = editArea.style.display !== 'none';
+    if (isVisible) {
+        cancelCommentEdit();
+    } else {
+        const textarea = document.getElementById('invoice-comment-input');
+        textarea.value = invoiceComment;
+        updateCommentCharCount();
+        editArea.style.display = 'block';
+        textarea.focus();
+    }
+}
+
+function saveComment() {
+    const textarea = document.getElementById('invoice-comment-input');
+    invoiceComment = textarea.value.trim();
+    document.getElementById('comment-edit-area').style.display = 'none';
+    renderCommentDisplay();
+}
+
+function cancelCommentEdit() {
+    document.getElementById('comment-edit-area').style.display = 'none';
+    document.getElementById('invoice-comment-input').value = invoiceComment;
+}
+
+function renderCommentDisplay() {
+    const displayEl = document.getElementById('comment-text-display');
+    if (invoiceComment) {
+        displayEl.className = 'comment-text';
+        displayEl.textContent = invoiceComment;
+    } else {
+        displayEl.className = 'comment-placeholder';
+        displayEl.textContent = 'Sin notas. Toca ✏️ para agregar.';
+    }
+}
+
+function updateCommentCharCount() {
+    const textarea = document.getElementById('invoice-comment-input');
+    const countEl  = document.getElementById('comment-char-count');
+    if (!textarea || !countEl) return;
+    const len = textarea.value.length;
+    countEl.textContent = `${len}/400`;
+    countEl.className = 'comment-char-count';
+    if (len >= 400)      countEl.classList.add('at-limit');
+    else if (len >= 300) countEl.classList.add('near-limit');
 }
 
 // ==========================================
@@ -2183,6 +2283,10 @@ document.addEventListener("DOMContentLoaded", () => {
     setPaymentStatus("pending");
     initClientAutocomplete();
     loadModalProductList();
+
+    // Contador de caracteres en textarea de comentario
+    const commentTA = document.getElementById('invoice-comment-input');
+    if (commentTA) commentTA.addEventListener('input', updateCommentCharCount);
 });
 
 // ==========================================
@@ -2414,6 +2518,7 @@ function convertHistoryToInvoiceData(historyItem) {
         invoiceDate: historyItem.invoiceDate,
         status: historyItem.paymentStatus,
         paymentDate: historyItem.paymentDate,
+        comment: historyItem.comment || '',
         rows: rows,
         subtotal: historyItem.totals.subtotal,
         iva: historyItem.totals.iva,
