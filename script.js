@@ -24,6 +24,7 @@ let editingProductIndex = null;
 let currentPaymentDate = null; // v2.4.0
 let selectedInvoices = new Set(); // v2.4.1
 let invoiceComment = ''; // Nota/comentario del pedido
+let clientBalance = 0; // Saldo del cliente: positivo = a favor, negativo = pendiente por pagar
 
 // ==========================================
 // v2.6.0: CONFIGURACIÓN LOCAL DE TIENDA
@@ -1583,7 +1584,98 @@ function updateTotals() {
     });
     document.getElementById('total-subtotal').textContent = formatCurrency(s);
     document.getElementById('total-iva').textContent      = formatCurrency(iv);
-    document.getElementById('total-grand').textContent    = formatCurrency(t);
+
+    // Aplicar saldo del cliente
+    const balanceRow = document.getElementById('balance-row');
+    const balanceLabel = document.getElementById('balance-label');
+    const balanceValue = document.getElementById('balance-value');
+    const grandTotal = t + clientBalance; // positivo = pendiente (suma), negativo = a favor (resta)
+
+    if (clientBalance !== 0 && balanceRow) {
+        balanceRow.style.display = '';
+        if (clientBalance > 0) {
+            // Saldo pendiente: el cliente debe dinero → se suma al total
+            balanceLabel.textContent = '⚠️ Saldo Pendiente';
+            balanceLabel.style.color = '#dc3545';
+            balanceValue.textContent = '+ ' + formatCurrency(clientBalance);
+            balanceValue.style.color = '#dc3545';
+        } else {
+            // Saldo a favor: el cliente tiene crédito → se resta del total
+            balanceLabel.textContent = '✅ Saldo a Favor';
+            balanceLabel.style.color = '#28a745';
+            balanceValue.textContent = '- ' + formatCurrency(Math.abs(clientBalance));
+            balanceValue.style.color = '#28a745';
+        }
+    } else if (balanceRow) {
+        balanceRow.style.display = 'none';
+    }
+
+    document.getElementById('total-grand').textContent = formatCurrency(Math.max(0, grandTotal));
+}
+
+// ==========================================
+// SALDO DEL CLIENTE
+// ==========================================
+function openBalanceModal() {
+    const input = document.getElementById('balance-type');
+    const amountInput = document.getElementById('balance-amount');
+    if (clientBalance > 0) {
+        input.value = 'pendiente';
+        amountInput.value = clientBalance.toFixed(2);
+    } else if (clientBalance < 0) {
+        input.value = 'favor';
+        amountInput.value = Math.abs(clientBalance).toFixed(2);
+    } else {
+        input.value = 'ninguno';
+        amountInput.value = '';
+    }
+    toggleBalanceAmountVisibility();
+    document.getElementById('balance-modal').classList.add('active');
+}
+
+function closeBalanceModal() {
+    document.getElementById('balance-modal').classList.remove('active');
+}
+
+function toggleBalanceAmountVisibility() {
+    const type = document.getElementById('balance-type').value;
+    const group = document.getElementById('balance-amount-group');
+    group.style.display = (type === 'ninguno') ? 'none' : 'block';
+}
+
+function applyBalance() {
+    const type = document.getElementById('balance-type').value;
+    const amount = parseFloat(document.getElementById('balance-amount').value) || 0;
+
+    if (type === 'ninguno') {
+        clientBalance = 0;
+    } else if (type === 'pendiente') {
+        if (amount <= 0) { alert('⚠️ Ingresa un monto válido mayor a 0'); return; }
+        clientBalance = amount; // positivo internamente = saldo pendiente = se suma al total
+    } else if (type === 'favor') {
+        if (amount <= 0) { alert('⚠️ Ingresa un monto válido mayor a 0'); return; }
+        clientBalance = -amount; // negativo internamente = saldo a favor = se resta del total
+    }
+
+    updateTotals();
+    updateBalanceBadge();
+    closeBalanceModal();
+}
+
+function updateBalanceBadge() {
+    const badge = document.getElementById('balance-badge');
+    if (!badge) return;
+    if (clientBalance < 0) {
+        badge.textContent = '⚠️ S.Pendiente';
+        badge.style.background = '#dc3545';
+        badge.style.display = 'inline-block';
+    } else if (clientBalance > 0) {
+        badge.textContent = '✅ S.a Favor';
+        badge.style.background = '#28a745';
+        badge.style.display = 'inline-block';
+    } else {
+        badge.style.display = 'none';
+    }
 }
 
 function removeRow(btn) { btn.closest('tr').remove(); updateTotals(); }
@@ -1642,10 +1734,12 @@ function getInvoiceData() {
         status: currentPaymentStatus,
         paymentDate: currentPaymentDate,
         comment: invoiceComment,
+        clientBalance: clientBalance,
         rows,
         subtotal: parseFloat(document.getElementById('total-subtotal').textContent.replace('$','')),
         iva:      parseFloat(document.getElementById('total-iva').textContent.replace('$','')),
-        total:    parseFloat(document.getElementById('total-grand').textContent.replace('$',''))
+        total:    parseFloat(document.getElementById('total-grand').textContent.replace('$','')),
+        balanceApplied: clientBalance
     };
 }
 
@@ -1915,6 +2009,33 @@ async function drawInvoiceOnCanvas(canvas, inv, scale) {
 
     drawTotalRow('Subtotal', '$' + inv.subtotal.toFixed(2), false);
     drawTotalRow('IVA',      '$' + inv.iva.toFixed(2),      false);
+
+    // Saldo del cliente
+    if (inv.clientBalance && inv.clientBalance !== 0) {
+        if (inv.clientBalance > 0) {
+            // Saldo pendiente: se suma
+            ctx.fillStyle = '#dc3545';
+            ctx.font      = `${px(10)}px Arial, sans-serif`;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillText('Saldo Pendiente', totX + px(6), y + px(14));
+            ctx.textAlign = 'right';
+            ctx.fillText('+ $' + inv.clientBalance.toFixed(2), RIGHT, y + px(14));
+            y += px(22);
+        } else {
+            // Saldo a favor: se resta
+            const absVal = Math.abs(inv.clientBalance);
+            ctx.fillStyle = '#28a745';
+            ctx.font      = `${px(10)}px Arial, sans-serif`;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillText('Saldo a Favor', totX + px(6), y + px(14));
+            ctx.textAlign = 'right';
+            ctx.fillText('- $' + absVal.toFixed(2), RIGHT, y + px(14));
+            y += px(22);
+        }
+    }
+
     y += px(4);
     drawTotalRow('TOTAL',    '$' + inv.total.toFixed(2),    true);
 
@@ -2180,6 +2301,8 @@ function loadInvoice(jsonData) {
         updatePaymentDateDisplay();
         invoiceComment = jsonData.comment || '';
         renderCommentDisplay();
+        clientBalance = jsonData.clientBalance || 0;
+        updateBalanceBadge();
         jsonData.items.forEach(item => {
             const tr = document.getElementById('invoice-items-body').insertRow();
             tr.dataset.subtotal = item.subtotal;
@@ -2210,6 +2333,8 @@ function newInvoice() {
     updatePaymentDateDisplay();
     invoiceComment = '';
     renderCommentDisplay();
+    clientBalance = 0;
+    updateBalanceBadge();
     updateTotals();
 }
 
