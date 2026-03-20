@@ -693,6 +693,7 @@
     <button class="btn btn-share" onclick="openShareModal()">📤 Compartir</button>
     <button class="btn btn-info" onclick="openHistoryModal()">📜 Historial</button>
     <button class="btn btn-warning" onclick="openStatusModal()">🏷️ Estado</button>
+    <button class="btn btn-secondary" onclick="openBalanceModal()">💰 Saldo <span id="balance-badge" style="display:none;padding:2px 6px;border-radius:10px;font-size:0.75em;color:#fff;margin-left:4px;"></span></button>
     <button class="btn btn-secondary" id="new-invoice-btn">🆕 Nueva</button>
 </div>
 
@@ -764,6 +765,10 @@
                     <td class="label">IVA</td>
                     <td class="value" id="total-iva">$0.00</td>
                 </tr>
+                <tr id="balance-row" style="display:none;">
+                    <td class="label" id="balance-label">Saldo</td>
+                    <td class="value" id="balance-value">$0.00</td>
+                </tr>
                 <tr class="grand-total">
                     <td class="label">TOTAL</td>
                     <td class="value" id="total-grand">$0.00</td>
@@ -795,6 +800,38 @@
     </div>
     <div class="invoice-disclaimer">
         Documento sin validez fiscal. Comprobante comercial interno.
+    </div>
+</div>
+
+<!-- ==================== MODAL SALDO CLIENTE ==================== -->
+<div class="modal-overlay" id="balance-modal">
+    <div class="modal-content" style="max-width:400px;">
+        <div class="modal-header">
+            <h2>💰 Saldo del Cliente</h2>
+            <button class="modal-close" onclick="closeBalanceModal()">×</button>
+        </div>
+        <div class="modal-section">
+            <p style="font-size:0.9em;color:#555;margin-bottom:12px;">
+                Ingresa si el cliente tiene un saldo <strong style="color:#dc3545">pendiente por pagar</strong> (se suma al total) o un <strong style="color:#28a745">saldo a favor</strong> (se resta del total).
+            </p>
+            <div class="input-group">
+                <label>Tipo de Saldo</label>
+                <select id="balance-type" onchange="toggleBalanceAmountVisibility()" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:4px;font-size:1em;">
+                    <option value="ninguno">Sin saldo</option>
+                    <option value="pendiente">⚠️ Saldo Pendiente (por pagar)</option>
+                    <option value="favor">✅ Saldo a Favor (crédito)</option>
+                </select>
+            </div>
+            <div class="input-group" id="balance-amount-group" style="display:none;margin-top:10px;">
+                <label>Monto ($)</label>
+                <input type="number" id="balance-amount" placeholder="0.00" min="0.01" step="0.01"
+                       style="width:100%;padding:10px;border:1px solid #ccc;border-radius:4px;font-size:1em;">
+            </div>
+        </div>
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="closeBalanceModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="applyBalance()">✅ Aplicar</button>
+        </div>
     </div>
 </div>
 
